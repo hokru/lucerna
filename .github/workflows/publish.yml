@@ -1,0 +1,55 @@
+name: Build and Publish Release Assets
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    name: Verify tests before release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies and project
+        run: uv sync --all-extras --dev
+
+      - name: Run tests
+        run: uv run pytest tests/ -v
+
+  github-release:
+    name: Build and upload Python 🐍 distributions to GitHub Release
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    # Required to upload assets to the GitHub Release
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Upload binaries to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
