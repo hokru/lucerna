@@ -2,6 +2,10 @@
 
 CodeTree is a lightweight, zero-dependency codebase mapping tool designed to generate `aider`-style repository maps optimized for LLM context windows. It scans your Python project (and mixed C++/Python projects), extracts classes, methods, functions, docstrings, and imports, builds a unified dependency graph, and ranks nodes using PageRank.
 
+## Disclaimer
+
+This library was in large parts written by Gemini and Claude models.
+
 ## Features
 
 - **LLM-Optimized Maps**: Generates condensed code summaries (signatures, docstrings, classes, constants) perfect for LLM context.
@@ -15,12 +19,16 @@ CodeTree is a lightweight, zero-dependency codebase mapping tool designed to gen
 - **Token/Character Budgeting**: Limit the output size by specifying a maximum cumulative character count (`--max-chars`), automatically pruning less relevant files first.
 - **Flexible Exclusions & Ignoring**: Respects local `.codetreeignore` files to skip specified patterns without repeating CLI flags.
 - **Python-Only Mode**: Skip scanning C++ binding source files completely via `--python-only`.
-- **Zero Dependencies**: Requires only a standard Python installation (uses native `ast` and pure-Python regex/graph utilities).
+- **Zero Dependencies**: Requires only a standard Python installation (uses native `ast` and pure-Python regex/graph utilities). (For optionally measuring token savings we need tiktoken, run `pip install -e .[savings]`)
 
 ## Installation
 
 ```bash
+# Standard installation (zero dependencies)
 pip install -e .
+
+# Optional: Install with savings measuring tool support
+pip install -e ".[savings]"
 ```
 
 ## Usage
@@ -49,6 +57,9 @@ codetree . --format mermaid
 
 # Extract the import neighborhood centered around a specific module with 2 hops of depth
 codetree . --neighborhood mypkg.utils --depth 2
+
+# Measure token savings in practice compared to raw codebase upload
+codetree-savings .
 ```
 
 ---

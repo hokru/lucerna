@@ -1,5 +1,6 @@
-import sys
-import os.path
+import sys  # noqa: F401
+import os.path  # noqa: F401
+
 
 def helper(x: int) -> str:
     """Helps with something."""
