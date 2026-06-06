@@ -1,3 +1,7 @@
+"""
+PageRank computation for the CodeGraph.
+For query-based relevance scoring and co-ranking, see search.py.
+"""
 from typing import Dict
 from .graph import CodeGraph
 

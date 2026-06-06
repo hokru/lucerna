@@ -23,7 +23,7 @@ BPDEF_RE = re.compile(r'^\s*def\s*\(\s*"([^"]+)"')
 
 def parse_cpp_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
     try:
-        with open(abs_path, 'r', encoding='utf-8') as f:
+        with open(abs_path, 'r', encoding='utf-8', errors='replace') as f:
             content = f.read()
     except Exception:
         return None
@@ -39,10 +39,16 @@ def parse_cpp_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
     symbols: List[ParsedSymbol] = []
     
     current_class = None
+    paren_depth = 0
     
     for i, line in enumerate(lines):
         stripped = line.strip()
         
+        # Helper check to see if a statement ends on this line.
+        # We strip trailing comments to be sure (e.g. '.def(...) ; // comment')
+        clean_line = stripped.split("//")[0].strip()
+        ends_with_semicolon = clean_line.endswith(";")
+            
         # Step 2: Class extraction
         # Look ahead up to 5 lines for a class_<...> declaration
         if "class_<" in line:
@@ -59,6 +65,8 @@ def parse_cpp_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
                     lineno=i+1,
                     decorators=[]
                 ))
+                if ends_with_semicolon:
+                    current_class = None
                 continue
                 
         # Check for properties/methods
@@ -73,7 +81,7 @@ def parse_cpp_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
                 lineno=i+1,
                 decorators=[]
             ))
-            if ";" in stripped:
+            if ends_with_semicolon:
                 current_class = None
             continue
             
@@ -89,7 +97,7 @@ def parse_cpp_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
                 lineno=i+1,
                 decorators=[]
             ))
-            if ";" in stripped:
+            if ends_with_semicolon:
                 current_class = None
             continue
             
@@ -105,12 +113,12 @@ def parse_cpp_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
                 lineno=i+1,
                 decorators=[]
             ))
-            if ";" in stripped:
+            if ends_with_semicolon:
                 current_class = None
             continue
             
         # Chain break heuristic: if we see a closing semicolon for a statement, we might break the class chain
-        if ";" in stripped:
+        if ends_with_semicolon:
             current_class = None
 
     return ParsedFile(
@@ -118,5 +126,6 @@ def parse_cpp_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
         module_name=module_name,
         symbols=symbols,
         imports=[],
-        docstring=None
+        docstring=None,
+        is_package=False
     )

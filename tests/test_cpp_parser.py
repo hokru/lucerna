@@ -29,3 +29,31 @@ def test_parse_cpp_file():
     assert len(functions) == 1
     assert functions[0].name == "free_func"
     assert functions[0].parent is None
+
+def test_cpp_class_chain_not_broken_by_internal_semicolons():
+    # Write a temporary cpp file with inline semicolons inside chained method arguments
+    import tempfile
+    
+    cpp_content = """
+    BOOST_PYTHON_MODULE(test_chain) {
+        class_<ChainClass>("ChainClass")
+            .def("method_one", &ChainClass::method_one, "A doc; with semicolon")
+            .def("method_two", &ChainClass::method_two)
+        ;
+    }
+    """
+    
+    with tempfile.NamedTemporaryFile("w", suffix=".cpp", delete=False) as f:
+        f.write(cpp_content)
+        temp_name = f.name
+        
+    try:
+        pf = parse_cpp_file(temp_name, "test_chain.cpp")
+        assert pf is not None
+        methods = [s for s in pf.symbols if s.kind == "method"]
+        assert len(methods) == 2
+        assert all(m.parent == "ChainClass" for m in methods)
+    finally:
+        import os
+        os.unlink(temp_name)
+

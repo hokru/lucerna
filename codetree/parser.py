@@ -29,6 +29,7 @@ class ParsedFile:
     symbols: List[ParsedSymbol]
     imports: List[ImportEntry]
     docstring: Optional[str]
+    is_package: bool = False
 
 
 def _format_arg(arg: ast.arg) -> str:
@@ -41,38 +42,12 @@ def _format_arg(arg: ast.arg) -> str:
     return s
 
 def _get_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    args = []
+    try:
+        sig = f"({ast.unparse(node.args)})"
+    except Exception:
+        # Fallback if unparse fails for any reason
+        sig = "()"
     
-    # Positional only
-    if hasattr(node.args, 'posonlyargs'):
-        for arg in node.args.posonlyargs:
-            args.append(_format_arg(arg))
-        if node.args.posonlyargs:
-            args.append("/")
-            
-    # Regular args
-    for arg in node.args.args:
-        args.append(_format_arg(arg))
-        
-    # Vararg (*args)
-    if node.args.vararg:
-        args.append("*" + _format_arg(node.args.vararg))
-        
-    # Kwonly args
-    if node.args.kwonlyargs:
-        if not node.args.vararg:
-            args.append("*")
-        for arg in node.args.kwonlyargs:
-            args.append(_format_arg(arg))
-            
-    # Kwarg (**kwargs)
-    if node.args.kwarg:
-        args.append("**" + _format_arg(node.args.kwarg))
-
-    # We need to inject defaults. Let's do a simplified version: 
-    # ast doesn't match defaults to args easily without counting backwards.
-    # To keep it simple and robust for the repo map, we just list the args with types.
-    sig = f"({', '.join(args)})"
     if node.returns:
         try:
             sig += f" -> {ast.unparse(node.returns)}"
@@ -136,6 +111,77 @@ class CodeVisitor(ast.NodeVisitor):
                 pass
         return decs
 
+    def visit_Assign(self, node: ast.Assign):
+        # Only parse module-level constants (not inside class or function)
+        if self.current_class is None:
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    name = target.id
+                    # We capture __all__ as well as uppercase constants
+                    if name == "__all__" or (name.isupper() and name.isidentifier()):
+                        try:
+                            val_str = ast.unparse(node.value)
+                        except Exception:
+                            val_str = ""
+                        self.symbols.append(ParsedSymbol(
+                            name=name,
+                            kind="constant",
+                            lineno=node.lineno,
+                            signature=f" = {val_str}",
+                            docstring=None,
+                            decorators=[],
+                            parent=None
+                        ))
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign):
+        if self.current_class is None and isinstance(node.target, ast.Name):
+            name = node.target.id
+            is_type_alias = False
+            # Check if type annotated as TypeAlias
+            if isinstance(node.annotation, ast.Name) and node.annotation.id == "TypeAlias":
+                is_type_alias = True
+            elif isinstance(node.annotation, ast.Attribute) and node.annotation.attr == "TypeAlias":
+                is_type_alias = True
+            
+            if is_type_alias or (name.isupper() and name.isidentifier()):
+                try:
+                    val_str = f" = {ast.unparse(node.value)}" if node.value else ""
+                except Exception:
+                    val_str = ""
+                try:
+                    ann_str = f": {ast.unparse(node.annotation)}"
+                except Exception:
+                    ann_str = ""
+                self.symbols.append(ParsedSymbol(
+                    name=name,
+                    kind="type_alias" if is_type_alias else "constant",
+                    lineno=node.lineno,
+                    signature=f"{ann_str}{val_str}",
+                    docstring=None,
+                    decorators=[],
+                    parent=None
+                ))
+        self.generic_visit(node)
+
+    def visit_TypeAlias(self, node: ast.TypeAlias):
+        if self.current_class is None and isinstance(node.name, ast.Name):
+            name = node.name.id
+            try:
+                val_str = ast.unparse(node.value)
+            except Exception:
+                val_str = ""
+            self.symbols.append(ParsedSymbol(
+                name=name,
+                kind="type_alias",
+                lineno=node.lineno,
+                signature=f" = {val_str}",
+                docstring=None,
+                decorators=[],
+                parent=None
+            ))
+        self.generic_visit(node)
+
     def visit_ClassDef(self, node: ast.ClassDef):
         self.symbols.append(ParsedSymbol(
             name=node.name,
@@ -162,8 +208,7 @@ class CodeVisitor(ast.NodeVisitor):
             decorators=self._get_decorators(node),
             parent=self.current_class
         ))
-        # Do not visit body to avoid nested functions cluttering the repo map,
-        # unless we specifically want inner functions. Usually we skip them.
+        # Do not visit body to avoid nested functions/classes cluttering the map.
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
         self.symbols.append(ParsedSymbol(
@@ -175,6 +220,7 @@ class CodeVisitor(ast.NodeVisitor):
             decorators=self._get_decorators(node),
             parent=self.current_class
         ))
+        # Do not visit body to avoid nested functions/classes cluttering the map.
 
 
 def parse_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
@@ -198,8 +244,10 @@ def parse_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
     # e.g. "codetree/parser.py" -> "codetree.parser"
     # "codetree/__init__.py" -> "codetree"
     parts = list(Path(rel_path).with_suffix("").parts)
+    is_package = False
     if parts and parts[-1] == "__init__":
         parts = parts[:-1]
+        is_package = True
     module_name = ".".join(parts) if parts else ""
     
     return ParsedFile(
@@ -207,5 +255,6 @@ def parse_file(abs_path: str, rel_path: str) -> Optional[ParsedFile]:
         module_name=module_name,
         symbols=visitor.symbols,
         imports=visitor.imports,
-        docstring=docstring
+        docstring=docstring,
+        is_package=is_package
     )

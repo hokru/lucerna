@@ -4,12 +4,17 @@ CodeTree is a lightweight, zero-dependency codebase mapping tool designed to gen
 
 ## Features
 
-- **LLM-Optimized Maps**: Generates condensed code summaries (signatures, docstrings, classes) perfect for LLM context.
+- **LLM-Optimized Maps**: Generates condensed code summaries (signatures, docstrings, classes, constants) perfect for LLM context.
+- **Directory Tree Mode**: Exports the codebase map as a visually intuitive file-system directory tree (`--format tree`).
+- **Semantic Relevance Search**: Dynamically adjusts detail levels by co-ranking files against a free-text semantic query, highlighting matches and collapsing irrelevant files (`--query`).
 - **Unified Dependency Graph**: Mentions, definitions, and imports across files are connected into a directed graph.
+- **Neighborhood Subgraphs**: Extract subgraph neighborhood of specific modules/symbols based on import relationships (`--neighborhood`). Customize depth traversal using `--depth`.
 - **PageRank Importance Scoring**: Automatically surfaces the most central and important modules first.
 - **C++ Bindings Support**: Detects and parses `Pybind11` and `Boost.Python` bindings in C++ source files (`.cpp`, `.cc`, `.cxx`).
 - **Smart Linking**: Connects Python import patterns (including specific conventions like `bp.import_ext("module")`) directly to the corresponding C++ binding definitions.
-- **Query Mode**: Interactively query the neighborhood of specific symbols to focus the map on relevant files.
+- **Token/Character Budgeting**: Limit the output size by specifying a maximum cumulative character count (`--max-chars`), automatically pruning less relevant files first.
+- **Flexible Exclusions & Ignoring**: Respects local `.codetreeignore` files to skip specified patterns without repeating CLI flags.
+- **Python-Only Mode**: Skip scanning C++ binding source files completely via `--python-only`.
 - **Zero Dependencies**: Requires only a standard Python installation (uses native `ast` and pure-Python regex/graph utilities).
 
 ## Installation
@@ -24,14 +29,26 @@ pip install -e .
 # Generate a standard text repository map for the current directory
 codetree .
 
+# Generate a hierarchical directory tree map showing PageRank scores
+codetree . --format tree --show-rank
+
+# Semantically search and focus the map on a specific topic
+codetree . --format tree --query "database connection"
+
+# Target a context window size of 5000 characters maximum
+codetree . --max-chars 5000
+
+# Skip scanning C++ source files completely
+codetree . --python-only
+
 # Output map in JSON format for the top 20 most important files according to PageRank
-codetree --format json --top-n 20 .
+codetree . --format json --top-n 20
 
 # Output a Mermaid diagram representing the dependency graph
-codetree --format mermaid .
+codetree . --format mermaid
 
-# Query the codebase map centered around a specific function or class
-codetree --query "my_function" .
+# Extract the import neighborhood centered around a specific module with 2 hops of depth
+codetree . --neighborhood mypkg.utils --depth 2
 ```
 
 ---

@@ -33,8 +33,23 @@ def scan_directory(root_dir: str, exclude_patterns: List[str] = None) -> List[Tu
     """
     if exclude_patterns is None:
         exclude_patterns = list(DEFAULT_EXCLUDES)
+    else:
+        exclude_patterns = list(exclude_patterns)
 
     root = Path(root_dir).resolve()
+    
+    # Read .codetreeignore if present
+    ignore_file = root / ".codetreeignore"
+    if ignore_file.is_file():
+        try:
+            with open(ignore_file, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#"):
+                        exclude_patterns.append(stripped)
+        except Exception:
+            pass
+
     results = []
 
     for current_dir, dirs, files in os.walk(root):

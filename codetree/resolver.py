@@ -28,20 +28,28 @@ class ResolvedImport:
     status: str             # "internal" | "stdlib" | "external" | "unresolvable"
     target_module: Optional[str]   # if internal, the resolved dotted module name
 
-def _resolve_relative(module_name: str, import_level: int, import_module: Optional[str]) -> Optional[str]:
+def _resolve_relative(module_name: str, import_level: int, import_module: Optional[str], is_package: bool = False) -> Optional[str]:
     """Resolve a relative import to an absolute module name."""
     if not module_name:
         parts = []
     else:
         parts = module_name.split('.')
         
+    # If this is a package (__init__.py), its module name represents the directory itself.
+    # Therefore, a relative import level of 1 means importing from the package directory itself,
+    # so we shouldn't strip the last module component (which represents the directory).
+    # Decrement the level of traversal by 1 to compensate.
+    effective_level = import_level
+    if is_package and effective_level > 0:
+        effective_level -= 1
+        
     # Go up levels
-    if import_level > len(parts):
+    if effective_level > len(parts):
         # Trying to go above top-level package
         return None
         
-    if import_level > 0:
-        parts = parts[:-import_level]
+    if effective_level > 0:
+        parts = parts[:-effective_level]
         
     if import_module:
         parts.extend(import_module.split('.'))
@@ -73,7 +81,9 @@ def resolve_imports(parsed_files: List[ParsedFile]) -> Dict[str, List[ResolvedIm
         for imp in pf.imports:
             # Determine the absolute module name requested
             if imp.is_relative:
-                target = _resolve_relative(pf.module_name, imp.level, imp.module)
+                # Need to check if pf has is_package attribute (parsed C++ files don't have it unless handled)
+                is_pkg = getattr(pf, 'is_package', False)
+                target = _resolve_relative(pf.module_name, imp.level, imp.module, is_package=is_pkg)
             else:
                 target = imp.module
                 
