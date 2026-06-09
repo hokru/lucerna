@@ -1,4 +1,4 @@
-from codetree.cpp_parser import parse_cpp_file
+from lucerna.cpp_parser import parse_cpp_file
 
 
 def test_parse_cpp_file():
